@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jackx Project Chess</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.13.4/chess.min.js"></script>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700&display=swap" rel="stylesheet">
+
+<style>
+
+*{box-sizing:border-box;font-family:'Poppins',sans-serif}
+
+body{
+ margin:0;
+ height:100vh;
+ display:flex;
+ flex-direction:column;
+ align-items:center;
+ justify-content:center;
+ background:radial-gradient(circle at top,#0f172a,#020617 80%);
+ color:white;
+}
+
+/* TITLE */
+h1{
+ margin:0;
+ letter-spacing:3px;
+ text-shadow:0 0 30px rgba(255,255,255,.25);
+}
+
+/* BOARD */
+#board{
+ width:600px;
+ height:600px;
+ margin-top:20px;
+ display:grid;
+ grid-template-columns:repeat(8,1fr);
+ border-radius:30px;
+ overflow:hidden;
+ border:2px solid rgba(255,255,255,.08);
+ box-shadow:
+ 0 0 100px rgba(0,0,0,.9),
+ inset 0 0 50px rgba(255,255,255,.05);
+ backdrop-filter:blur(8px);
+}
+
+.square{
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ font-size:44px;
+ cursor:pointer;
+ transition:.18s;
+}
+
+.white{background:#e2e8f0;color:black}
+.black{background:#1e293b}
+
+.square:hover{
+ filter:brightness(1.25);
+ transform:scale(1.05);
+}
+
+/* MOVE HINT */
+.move{
+ background:radial-gradient(circle,rgba(14,165,233,.8) 25%,transparent 25%);
+}
+
+/* CAPTURE HINT */
+.capture{
+ background:radial-gradient(circle,rgba(239,68,68,.9) 25%,transparent 25%);
+}
+
+/* LAST MOVE */
+.lastmove{
+ box-shadow:inset 0 0 0 4px #22c55e;
+}
+
+/* CHECK */
+.check{
+ background:#ef4444 !important;
+}
+
+/* PANEL */
+.panel{
+ margin-top:18px;
+ display:flex;
+ gap:10px;
+ flex-wrap:wrap;
+ justify-content:center;
+}
+
+button,select{
+ padding:10px 16px;
+ border:none;
+ border-radius:14px;
+ background:linear-gradient(135deg,#0ea5e9,#0284c7);
+ color:white;
+ font-weight:600;
+ cursor:pointer;
+ box-shadow:0 0 20px rgba(14,165,233,.6);
+}
+
+.status{margin-top:12px;font-size:15px}
+.footer{margin-top:6px;font-size:13px;opacity:.6}
+
+</style>
+</head>
+<body>
+
+<h1>♟ JACKX PROJECT CHESS ♟</h1>
+<div id="board"></div>
+
+<div class="panel">
+ <button onclick="setMode('pvp')">1 VS 1 PLAYER</button>
+ <button onclick="setMode('ai')">VS AI</button>
+
+ <select id="difficulty">
+  <option value="1">MUDAH</option>
+  <option value="2">NORMAL</option>
+  <option value="3">SULIT</option>
+  <option value="4">SANGAT SULIT</option>
+  <option value="5">EXTREME</option>
+  <option value="6">MAX ENGINE</option>
+ </select>
+
+ <button onclick="resetGame()">RESET</button>
+</div>
+
+<div class="status" id="status">Turn: White</div>
+<div class="footer">by: jackx project</div>
+
+<audio id="eat" src="dimakan.mp3"></audio>
+<audio id="mate" src="skakmat.mp3"></audio>
+<audio id="aiwin" src="AI WIN.mp3"></audio>
+<audio id="playerwin" src="player win.mp3"></audio>
+
+<script>const game=new Chess();
+let selected=null;
+let mode='pvp';
+let lastMove=null;
+
+const pieces={
+ p:'♟',r:'♜',n:'♞',b:'♝',q:'♛',k:'♚',
+ P:'♙',R:'♖',N:'♘',B:'♗',Q:'♕',K:'♔'
+};
+
+function setMode(m){
+ mode=m;
+}
+
+function drawBoard(){
+
+ board.innerHTML='';
+ const pos=game.board();
+
+ for(let r=0;r<8;r++){
+  for(let c=0;c<8;c++){
+
+   const sq=document.createElement('div');
+   sq.className='square '+((r+c)%2==0?'white':'black');
+
+   const coord=String.fromCharCode(97+c)+(8-r);
+   sq.dataset.square=coord;
+
+   const piece=pos[r][c];
+   if(piece){
+    sq.textContent=
+     pieces[piece.color==='w'?piece.type.toUpperCase():piece.type];
+   }
+
+   if(lastMove &&
+      (coord===lastMove.from||coord===lastMove.to)){
+      sq.classList.add('lastmove');
+   }
+
+   sq.onclick=()=>clickSquare(coord);
+   board.appendChild(sq);
+  }
+ }
+
+ highlightCheck();
+ status.innerText=
+  'Turn: '+(game.turn()==='w'?'White':'Black');
+}
+
+function clickSquare(square){
+
+ if(!selected){
+  selected=square;
+  showMoves(square);
+  return;
+ }
+
+ const move=game.move({
+  from:selected,
+  to:square,
+  promotion:'q'
+ });
+
+ selected=null;
+ drawBoard();
+
+ if(move){
+
+  lastMove=move;
+
+  if(move.captured) eat.play();
+
+  checkState();
+
+  if(mode==='ai'&&!game.game_over()){
+   setTimeout(aiMove,300);
+  }
+ }
+}
+
+function showMoves(square){
+
+ drawBoard();
+
+ const moves=game.moves({
+  square,
+  verbose:true
+ });
+
+ moves.forEach(m=>{
+
+  const el=
+   document.querySelector(
+    `[data-square='${m.to}']`
+   );
+
+  if(!el) return;
+
+  if(m.captured)
+   el.classList.add('capture');
+  else
+   el.classList.add('move');
+ });
+}
+
+function highlightCheck(){
+
+ if(!game.in_check()) return;
+
+ const king=findKing(game.turn());
+
+ const el=document.querySelector(
+  `[data-square='${king}']`
+ );
+
+ if(el) el.classList.add('check');
+}
+
+function findKing(color){
+
+ const b=game.board();
+
+ for(let r=0;r<8;r++){
+  for(let c=0;c<8;c++){
+
+   const p=b[r][c];
+
+   if(p&&p.type==='k'&&p.color===color)
+    return String.fromCharCode(97+c)+(8-r);
+  }
+ }
+}        // Mendapatkan langkah AI terbaik
+        function getAIMove() {
+            let moves = chess.moves({ verbose: true });
+            if (moves.length === 0) return null;
+
+            let depth = { mudah:0, normal:2, sulit:3, sangatSulit:4, max:5 }[aiDifficulty] || 2;
+            if (depth === 0) return moves[Math.floor(Math.random() * moves.length)];
+
+            let bestMove = null;
+            let isMaximizing = chess.turn() === 'w';
+            let bestValue = isMaximizing ? -Infinity : Infinity;
+            moves = orderMoves(moves);
+            for (let m of moves) {
+                chess.move(m);
+                let value = minimax(chess, depth-1, -Infinity, Infinity, !isMaximizing);
+                chess.undo();
+                if (isMaximizing) {
+                    if (value > bestValue) { bestValue = value; bestMove = m; }
+                } else {
+                    if (value < bestValue) { bestValue = value; bestMove = m; }
+                }
+            }
+            return bestMove;
+        }
+
+        // Eksekusi langkah (dari player atau AI) dan update status
+        function applyMove(move) {
+            if (!move) return false;
+
+            const isCapture = move.flags && (move.flags.includes('c') || move.flags.includes('e'));
+            if (isCapture) playSound('dimakan.mp3');
+
+            lastMoveFrom = move.from;
+            lastMoveTo = move.to;
+            chess.move(move);
+            selectedSquare = null;
+            renderBoard();
+
+            if (chess.game_over()) {
+                gameOverFlag = true;
+                if (chess.in_checkmate()) {
+                    playSound('skakmat.mp3');
+                    const loser = chess.turn();
+                    const winner = loser === 'w' ? 'Hitam' : 'Putih';
+                    if (mode === 'ai') {
+                        if (winner === 'Putih') {
+                            playSound('player win.mp3');
+                            statusEl.innerText = '🏆 PLAYER (PUTIH) MENANG!';
+                        } else {
+                            playSound('AI WIN.mp3');
+                            statusEl.innerText = '🤖 AI (HITAM) MENANG!';
+                        }
+                    } else {
+                        playSound('player win.mp3');
+                        statusEl.innerText = `🏆 ${winner} menang!`;
+                    }
+                } else {
+                    statusEl.innerText = '🏁 Seri / Stalemate';
+                }
+            } else {
+                gameOverFlag = false;
+                statusEl.innerText = `♔ giliran : ${chess.turn() === 'w' ? 'putih' : 'hitam'}`;
+            }
+            return true;
+        }
+
+        // Giliran AI (dipanggil setelah player move)
+        function aiTurn() {
+            if (mode !== 'ai' || chess.turn() !== 'b' || chess.game_over() || aiThinking) return;
+            aiThinking = true;
+            setTimeout(() => {
+                if (chess.game_over() || chess.turn() !== 'b') { aiThinking = false; return; }
+                let move = getAIMove();
+                if (move) applyMove(move);
+                aiThinking = false;
+            }, 150);
+        }
+
+        // Render papan dengan buah, highlight, last move
+        function renderBoard() {
+            const board = chess.board();
+            let html = '';
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const piece = board[r][c];
+                    let symbol = '';
+                    if (piece) {
+                        const map = { p:'♟', n:'♞', b:'♝', r:'♜', q:'♛', k:'♚', P:'♙', N:'♘', B:'♗', R:'♖', Q:'♕', K:'♔' };
+                        symbol = map[piece.type.toUpperCase()] || '';
+                    }
+                    const square = String.fromCharCode(97 + c) + (8 - r);
+                    const isLight = (r + c) % 2 === 0;
+                    let classes = `square ${isLight ? 'light' : 'dark'}`;
+                    if (selectedSquare === square) classes += ' selected';
+                    if (lastMoveFrom === square || lastMoveTo === square) classes += ' last-move';
+                    if (selectedSquare) {
+                        const moves = chess.moves({ verbose: true, square: selectedSquare });
+                        if (moves.some(m => m.to === square)) classes += ' legal-move';
+                    }
+                    html += `<div class="${classes}" data-square="${square}" data-coord="${square}">${symbol}</div>`;
+                }
+            }
+            boardEl.innerHTML = html;
+        }
+
+        // Handler klik pada papan
+        function handleBoardClick(e) {
+            const sqDiv = e.target.closest('.square');
+            if (!sqDiv || aiThinking || gameOverFlag) return;
+            const square = sqDiv.dataset.square;
+
+            if (mode === 'ai' && chess.turn() !== 'w') return; // hanya putih di AI
+
+            if (!selectedSquare) {
+                const piece = chess.get(square);
+                if (piece && piece.color === chess.turn()) {
+                    selectedSquare = square;
+                    renderBoard();
+                }
+                return;
+            }
+
+            if (selectedSquare === square) {
+                selectedSquare = null;
+                renderBoard();
+                return;
+            }
+
+            const move = { from: selectedSquare, to: square, promotion: 'q' };
+            const legal = chess.moves({ verbose: true });
+            const matched = legal.find(m => m.from === move.from && m.to === move.to);
+            if (matched) {
+                applyMove(matched);
+                if (mode === 'ai' && !chess.game_over() && chess.turn() === 'b') aiTurn();
+            } else {
+                const piece = chess.get(square);
+                if (piece && piece.color === chess.turn()) {
+                    selectedSquare = square;
+                } else {
+                    selectedSquare = null;
+                }
+                renderBoard();
+            }
+        }
+
+        // Reset game
+        function resetGame() {
+            chess.reset();
+            selectedSquare = null;
+            gameOverFlag = false;
+            aiThinking = false;
+            lastMoveFrom = lastMoveTo = null;
+            renderBoard();
+            statusEl.innerText = '♔ giliran : putih';
+        }
+
+        // Update mode (tampilkan/sembunyikan difficulty)
+        function updateMode() {
+            mode = document.querySelector('input[name="gameMode"]:checked').value;
+            difficultyBlock.style.display = mode === 'ai' ? 'flex' : 'none';
+            resetGame();
+        }
+
+        // Pasang event listener
+        boardEl.addEventListener('click', handleBoardClick);
+        resetBtn.addEventListener('click', resetGame);
+        modeRadios.forEach(r => r.addEventListener('change', updateMode));
+        difficultySelect.addEventListener('change', e => {
+            aiDifficulty = e.target.value;
+            resetGame();
+        });
+
+        // Inisialisasi
+        renderBoard();
+        updateMode(); // atur tampilan difficulty
+    })();
+</script>
+</body>
+</html>
